@@ -1,71 +1,70 @@
 import numpy as np
-import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
 
-def preprocess_data(data, feature_columns=['Close'], target_column='Close', look_back=60):
+def preprocess_data(data, look_back=60):
     """
-    Preprocess the stock data for the LSTM model.
+    Prepares time series data for LSTM training by creating sequences of historical data 
+    with the specified look-back period.
     
     Parameters:
     - data: DataFrame containing the stock data.
-    - feature_columns: List of column names to use as features.
-    - target_column: Column name to use as the target.
-    - look_back: Number of past days to consider for predicting a future value.
+    - look_back: Number of previous time steps to use as input variables to predict the next time period.
     
     Returns:
-    - X: Features data set.
-    - y: Target data set.
+    - X: Feature dataset (input sequences).
+    - y: Target dataset (next time period's value).
     """
     X, y = [], []
     for i in range(len(data) - look_back):
-        X.append(data[feature_columns].iloc[i:(i + look_back)].values)
-        y.append(data[target_column].iloc[i + look_back])
-    
-    X, y = np.array(X), np.array(y)
-    return X, y
+        X.append(data[i:(i + look_back)])
+        y.append(data[i + look_back])
+    return np.array(X), np.array(y)
 
-def scale_data(X_train, y_train, X_test):
+def scale_data(data):
     """
-    Scale the data using MinMaxScaler for LSTM input.
+    Scales data to be between 0 and 1, which is useful for LSTM models. This function returns the scaler 
+    for inverse transformation and the scaled data.
     
     Parameters:
-    - X_train: Training feature dataset.
-    - y_train: Training target dataset.
-    - X_test: Test feature dataset.
+    - data: Data to be scaled.
     
     Returns:
-    - Scaled versions of the input datasets.
+    - scaler: The scaler used for data transformation.
+    - scaled_data: Scaled version of the input data.
     """
-    from sklearn.preprocessing import MinMaxScaler
     scaler = MinMaxScaler(feature_range=(0, 1))
-    X_train_scaled = np.array([scaler.fit_transform(x) for x in X_train])
-    X_test_scaled = np.array([scaler.transform(x) for x in X_test])
-    y_train_scaled = scaler.fit_transform(y_train.reshape(-1, 1)).reshape(-1)
-    
-    return X_train_scaled, y_train_scaled, X_test_scaled, scaler
+    scaled_data = scaler.fit_transform(data.reshape(-1, 1))
+    return scaler, scaled_data
 
-def inverse_transform_y(y, scaler):
+def inverse_transform(scaler, data):
     """
-    Inverse transform the scaled target values back to their original scale.
+    Performs inverse transformation of scaled data back to its original scale.
     
     Parameters:
-    - y: Scaled target dataset.
-    - scaler: The scaler used for original scaling.
+    - scaler: The scaler used for the original scaling.
+    - data: Scaled data to be inversely transformed.
     
     Returns:
-    - y_orig: Target dataset in original scale.
+    - Original scale data.
     """
-    y_orig = scaler.inverse_transform(y.reshape(-1, 1)).reshape(-1)
-    return y_orig
+    return scaler.inverse_transform(data)
 
-def handle_error(message):
+def prepare_data_for_prediction(data, look_back=60):
     """
-    Generic error handling function to display error messages.
+    Prepares the recent stock data for prediction using the trained LSTM model.
     
     Parameters:
-    - message: The error message to display.
+    - data: DataFrame containing the recent stock data.
+    - look_back: Number of previous time steps to use as input variables.
     
     Returns:
-    - None
+    - prepared_data: Data reshaped and ready for LSTM model prediction.
     """
-    print(f"Error: {message}")
-    # Depending on your application, you might want to log this error or notify the user differently.
+    prepared_data = []
+    # Assuming 'data' is already scaled and in the correct format
+    length = len(data)
+    if length >= look_back:
+        prepared_data.append(data[(length - look_back):])
+    prepared_data = np.array(prepared_data)
+    prepared_data = np.reshape(prepared_data, (prepared_data.shape[0], look_back, 1))
+    return prepared_data
