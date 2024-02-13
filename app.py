@@ -3,6 +3,8 @@ from data_fetcher import fetch_stock_data, fetch_futures_data
 from model import train_lstm_model, predict_stock_price
 from watchlist import Watchlist
 import pandas as pd
+import os
+import warnings
 
 # Initialize watchlist
 user_watchlist = Watchlist()
@@ -56,3 +58,7 @@ elif page == "Watchlist":
             st.write(ticker)
             # This could be expanded to include more detailed stock info or predictions
 
+
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Suppress TensorFlow logging except for errors
+warnings.filterwarnings('ignore', category=FutureWarning)  # Ignore FutureWarnings
