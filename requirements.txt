@@ -3,5 +3,5 @@ yfinance==0.2.36
 tensorflow==2.15.0
 pandas==2.2.0
 numpy==1.26.4
-sklearn==1.4.0
+scikit-learn==1.4.0
 matplotlib==3.8.2
