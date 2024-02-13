@@ -1,7 +1,7 @@
 import numpy as np
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
-from utils import scale_data, preprocess_data, inverse_transform, prepare_data_for_prediction
+from utils import scale_data, preprocess_data, inverse_transform
 from data_fetcher import fetch_stock_data
 
 def create_lstm_model(input_shape):

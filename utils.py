@@ -15,12 +15,3 @@ def scale_data(data):
 
 def inverse_transform(scaler, data):
     return scaler.inverse_transform(data)
-
-def prepare_data_for_prediction(data, look_back=60):
-    prepared_data = []
-    length = len(data)
-    if length >= look_back:
-        prepared_data.append(data[(length - look_back):])
-    prepared_data = np.array(prepared_data)
-    prepared_data = np.reshape(prepared_data, (prepared_data.shape[0], look_back, 1))
-    return prepared_data

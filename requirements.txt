@@ -4,3 +4,5 @@ yfinance==0.2.36
 pandas==2.2.0
 numpy==1.26.4
 scikit-learn==1.4.0
+newsapi-python==0.2.7
+nltk==3.8.1
