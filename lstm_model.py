@@ -1,8 +1,9 @@
 import numpy as np
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
-from utils import scale_data, preprocess_data, inverse_transform, prepare_data_for_prediction
+from utils import scale_data, preprocess_data, inverse_transform
 from data_fetcher import fetch_stock_data
+import pandas as pd
 
 def create_lstm_model(input_shape):
     model = Sequential([
@@ -37,15 +38,51 @@ def train_and_save_model(ticker, start_date, end_date, look_back=60):
         print("Failed to fetch data for ticker:", ticker)
         return None, None
 
-def predict_future_prices(model, scaler, recent_data, look_back=60, days_to_predict=1):
+def predict_future_prices(model, scaler, recent_data, look_back=60):
+    # Adjusted to predict a fixed number of future working days (approx. 28 days excluding weekends)
+    # This does not account for public holidays.
+    days_to_predict = 28
     predictions = []
     current_batch = recent_data[-look_back:].reshape((1, look_back, 1))
     
-    for i in range(days_to_predict):
+    for i in range(days_to_predict * 2):  # Assuming roughly 2x to account for weekends
         predicted_price = model.predict(current_batch)[0]
-        predictions.append(predicted_price)
-        
+        next_day_index = (pd.Timestamp.today() + pd.Timedelta(days=i+1)).dayofweek
+        if next_day_index < 5:  # Skip weekends
+            predictions.append(predicted_price)
+            if len(predictions) >= days_to_predict:
+                break
         current_batch = np.append(current_batch[:,1:,:], [[predicted_price]], axis=1)
     
     predictions = scaler.inverse_transform(np.array(predictions).reshape(-1, 1)).flatten()
     return predictions
+
+
+def predict_previous_month_prices(model, scaler, data, look_back=60):
+    """
+    Predicts prices for the previous month using the trained LSTM model.
+    
+    Parameters:
+    - model: The trained LSTM model.
+    - scaler: Scaler used for data preprocessing.
+    - data: Data used for making predictions, should include the last 'look_back' days before the month you want to predict.
+    - look_back: Number of days to look back for creating a single sequence.
+    
+    Returns:
+    - predictions: Predicted prices for the previous month.
+    """
+    # Calculate the number of weekdays in the last month
+    last_month_start = (pd.Timestamp.today().replace(day=1) - pd.Timedelta(days=1)).replace(day=1)
+    last_month_end = pd.Timestamp.today().replace(day=1) - pd.Timedelta(days=1)
+    weekdays_in_month = pd.date_range(start=last_month_start, end=last_month_end, freq='B')
+
+    predictions = []
+    current_batch = data[-look_back:].reshape((1, look_back, 1))
+    
+    for i in range(len(weekdays_in_month)):
+        predicted_price = model.predict(current_batch)[0]
+        predictions.append(predicted_price)
+        current_batch = np.append(current_batch[:,1:,:], [[predicted_price]], axis=1)
+    
+    predictions = scaler.inverse_transform(np.array(predictions).reshape(-1, 1)).flatten()
+    return predictions, weekdays_in_month
