@@ -1,50 +1,44 @@
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
+import pandas as pd
+from pandas.tseries.offsets import BDay
+from pandas.tseries.holiday import USFederalHolidayCalendar
 
 def preprocess_data(data, look_back=60):
     """
-    Prepares time series data for LSTM training by creating sequences of historical data 
-    with the specified look-back period and multiple features.
-    
-    Parameters:
-    - data: DataFrame containing the stock data.
-    - look_back: Number of previous time steps to use as input variables to predict the next time period.
-    
-    Returns:
-    - X: Feature dataset (input sequences).
-    - y: Target dataset (next time period's value for 'Close').
+    Prepares time series data for LSTM training by creating sequences of historical data with the specified look-back period.
     """
     X, y = [], []
     for i in range(len(data) - look_back):
         X.append(data[i:(i + look_back)])
-        y.append(data[i + look_back, 3])  # Assuming 'Close' is at index 3
+        y.append(data[i + look_back])
     return np.array(X), np.array(y)
 
 def scale_data(data):
     """
-    Scales multiple features data to be between 0 and 1, which is useful for LSTM models. 
-    This function returns the scaler for inverse transformation and the scaled data.
-    
-    Parameters:
-    - data: Multi-dimensional data to be scaled.
-    
-    Returns:
-    - scaler: The scaler used for data transformation.
-    - scaled_data: Scaled version of the input data.
+    Scales data to be between 0 and 1, which is useful for LSTM models.
     """
     scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(data)
+    scaled_data = scaler.fit_transform(data.reshape(-1, 1))
     return scaler, scaled_data
 
 def inverse_transform(scaler, data):
     """
-    Performs inverse transformation of scaled data back to its original scale.
-    
-    Parameters:
-    - scaler: The scaler used for the original scaling.
-    - data: Scaled data to be inversely transformed.
-    
-    Returns:
-    - Original scale data.
+    Inverse transforms the scaled data back to its original scale.
     """
     return scaler.inverse_transform(data)
+
+def get_business_days_in_month(start_date, end_date):
+    """
+    Generates a list of business days within a given range, excluding weekends and US federal holidays.
+    """
+    us_bd = CustomBusinessDay(calendar=USFederalHolidayCalendar())
+    return pd.date_range(start_date, end_date, freq=us_bd)
+
+def get_business_days_future(start_date, days_ahead):
+    """
+    Generates a list of future business days from a given start date, excluding weekends and US federal holidays.
+    """
+    us_bd = CustomBusinessDay(calendar=USFederalHolidayCalendar())
+    end_date = pd.offsets.CustomBusinessDay(days=days_ahead, calendar=USFederalHolidayCalendar())
+    return pd.date_range(start_date, periods=days_ahead, freq=us_bd)
