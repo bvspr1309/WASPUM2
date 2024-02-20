@@ -4,76 +4,65 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from data_fetcher import fetch_stock_data
 from lstm_model import train_and_save_model, predict_future_prices, predict_previous_month_prices
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from utils import get_business_days_in_month, get_business_days_future
 
-# Set up Streamlit app configuration
+# Setting up the Streamlit app configuration
 st.set_page_config(page_title="LSTM Stock Price Prediction", layout="wide")
 st.title('Stock Price Predictions with LSTM')
 
-# Sidebar configuration
+# Sidebar for user input parameters
 st.sidebar.header('User Input Parameters')
 ticker = st.sidebar.text_input('Stock Ticker', value='AAPL').upper()
 today = date.today()
-start_date = st.sidebar.date_input('Start Date', today - timedelta(days=365 * 2))
+start_date = st.sidebar.date_input('Start Date', today - timedelta(days=365))
 end_date = st.sidebar.date_input('End Date', today)
 
 if start_date > end_date:
     st.sidebar.error('Error: End date must be after start date.')
 
-# Display recent data
-st.header(f'Recent Data for {ticker}')
-data = fetch_stock_data(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-if data is not None and not data.empty:
-    st.write(data.tail(10))
+# Displaying recent stock data
+st.header(f'Recent Stock Data for {ticker}')
+data = fetch_stock_data(ticker, start_date, end_date)
+if not data.empty:
+    st.write(data.tail())
 
-# LSTM Model Prediction and Comparison
+# Predicting future stock prices
+st.header('Predict Future Stock Prices')
 if st.button('Predict'):
-    with st.spinner('Training model...'):
-        model, scaler = train_and_save_model(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), look_back=60)
-        if model is not None:
-            st.success('Model trained successfully!')
+    model, scaler = train_and_save_model(ticker, start_date, end_date)
+    if model:
+        future_dates = get_business_days_future(end_date, 28)
+        predictions = predict_future_prices(model, scaler, data['Close'], 60, future_dates)
+        
+        st.subheader('Future Price Predictions')
+        for date, price in zip(future_dates, predictions):
+            st.write(f"{date.date()} ({date.strftime('%A')}): ${price:.2f}")
+    else:
+        st.error('Failed to train the model. Please check the data or try different parameters.')
 
-            # Future prediction for the next 28 working days
-            recent_data = data['Close'].values[-60:]
-            future_dates = pd.date_range(start=pd.Timestamp.today(), periods=40, freq='B')[:28]
-            predictions = predict_future_prices(model, scaler, recent_data, look_back=60)
-            st.header('Prediction Results for the Next 28 Working Days')
-            for date, prediction in zip(future_dates, predictions):
-                st.write(f"{date.strftime('%Y-%m-%d')} ({date.strftime('%A')}): ${prediction:.2f}")
+# Predicting and evaluating the previous month's stock prices
+st.header("Evaluation of Model's Performance for Previous Month")
+previous_month_start, previous_month_end = get_business_days_in_month(today - pd.offsets.MonthBegin(2), today - pd.offsets.MonthBegin(1))
+if st.button('Evaluate Model'):
+    historical_data = fetch_stock_data(ticker, previous_month_start - timedelta(days=90), previous_month_end)
+    predictions, actuals = predict_previous_month_prices(model, scaler, historical_data['Close'], previous_month_start, previous_month_end)
 
-            # Predict and compare previous month's prices
-            prev_data_start = today - timedelta(days=180)  # 6 months prior for training data
-            prev_data_end = today - timedelta(days=1)  # Until yesterday
-            prev_data = fetch_stock_data(ticker, prev_data_start.strftime('%Y-%m-%d'), prev_data_end.strftime('%Y-%m-%d'))
-            prev_month_predictions, prediction_dates = predict_previous_month_prices(model, scaler, prev_data['Close'].values[-60:], look_back=60)
-            
-            # Fetch actual prices for the last month
-            last_month_data = fetch_stock_data(ticker, prediction_dates[0].strftime('%Y-%m-%d'), prediction_dates[-1].strftime('%Y-%m-%d'))
-            actual_prices = last_month_data['Close'].values
-            dates = last_month_data['Date']
-            
-            # Ensure lengths match for plotting
-            min_len = min(len(actual_prices), len(prev_month_predictions))
-            actual_prices = actual_prices[:min_len]
-            prev_month_predictions = prev_month_predictions[:min_len]
-            dates = dates[:min_len]
+    if predictions is not None:
+        # Plotting actual vs predicted prices
+        plt.figure(figsize=(10, 5))
+        plt.plot(historical_data['Date'][-len(actuals):], actuals, marker='o', label='Actual Prices')
+        plt.plot(historical_data['Date'][-len(predictions):], predictions, marker='x', linestyle='--', label='Predicted Prices')
+        plt.title('Actual vs Predicted Stock Prices for the Previous Month')
+        plt.xlabel('Date')
+        plt.ylabel('Price')
+        plt.xticks(rotation=45)
+        plt.legend()
+        st.pyplot(plt)
 
-            # Plot actual vs predicted prices
-            plt.figure(figsize=(10, 5))
-            plt.plot(dates, actual_prices, label='Actual Prices')
-            plt.plot(dates, prev_month_predictions, label='Predicted Prices', linestyle='--')
-            plt.title('Actual vs Predicted Prices for Last Month')
-            plt.xlabel('Date')
-            plt.ylabel('Price')
-            plt.legend()
-            st.pyplot(plt)
-            
-            # Display evaluation metrics
-            mse = mean_squared_error(actual_prices, prev_month_predictions)
-            mae = mean_absolute_error(actual_prices, prev_month_predictions)
-            r2 = r2_score(actual_prices, prev_month_predictions)
-            st.write(f"Mean Squared Error (MSE): {mse}")
-            st.write(f"Mean Absolute Error (MAE): {mae}")
-            st.write(f"R^2 Score: {r2}")
-        else:
-            st.error('Model training failed.')
+        # Calculating and displaying evaluation metrics
+        mse, mae, r2 = calculate_evaluation_metrics(actuals, predictions)
+        st.write(f"Mean Squared Error (MSE): {mse}")
+        st.write(f"Mean Absolute Error (MAE): {mae}")
+        st.write(f"R^2 Score: {r2}")
+    else:
+        st.error("Model evaluation failed. Insufficient or inadequate data for the previous month.")
