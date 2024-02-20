@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 import pandas as pd
 from pandas.tseries.offsets import BDay
+from pandas.tseries.offsets import CustomBusinessDay
 from pandas.tseries.holiday import USFederalHolidayCalendar
 
 def preprocess_data(data, look_back=60):
