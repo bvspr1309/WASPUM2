@@ -20,11 +20,12 @@ def create_lstm_model(input_shape):
 def train_and_save_model(ticker, start_date, end_date, look_back=60):
     df = fetch_stock_data(ticker, start_date, end_date)
     if df is not None:
-        close_prices = df['Close'].values
-        scaler, scaled_data = scale_data(close_prices)
-        X, y = preprocess_data(scaled_data.flatten(), look_back)
+        features_considered = ['Open', 'High', 'Low', 'Close', 'Volume']
+        features = df[features_considered]
+        scaler, scaled_data = scale_data(features.values)
+        X, y = preprocess_data(scaled_data, look_back)
         
-        X = np.reshape(X, (X.shape[0], X.shape[1], 1))
+        X = np.reshape(X, (X.shape[0], X.shape[1], len(features_considered)))
         
         split = int(0.8 * len(X))
         X_train, X_test = X[:split], X[split:]
