@@ -10,6 +10,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 st.set_page_config(page_title="LSTM Stock Price Prediction", layout="wide")
 st.title('Stock Price Predictions with LSTM')
 
+# Sidebar configuration
 st.sidebar.header('User Input Parameters')
 ticker = st.sidebar.text_input('Stock Ticker', value='AAPL').upper()
 today = date.today()
@@ -25,29 +26,42 @@ data = fetch_stock_data(ticker, start_date.strftime('%Y-%m-%d'), end_date.strfti
 if data is not None and not data.empty:
     st.write(data.tail(10))
 
-# LSTM Model Prediction
-st.header('Predict Future Stock Prices')
+# LSTM Model Prediction and Comparison
 if st.button('Predict'):
     with st.spinner('Training model...'):
         model, scaler = train_and_save_model(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), look_back=60)
         if model is not None:
             st.success('Model trained successfully!')
-            # Future prediction part remains unchanged...
+
+            # Future prediction for the next 28 working days
+            recent_data = data['Close'].values[-60:]
+            future_dates = pd.date_range(start=pd.Timestamp.today(), periods=40, freq='B')[:28]
+            predictions = predict_future_prices(model, scaler, recent_data, look_back=60)
+            st.header('Prediction Results for the Next 28 Working Days')
+            for date, prediction in zip(future_dates, predictions):
+                st.write(f"{date.strftime('%Y-%m-%d')} ({date.strftime('%A')}): ${prediction:.2f}")
 
             # Predict and compare previous month's prices
-            prev_data_start = (today - timedelta(days=180)).strftime('%Y-%m-%d')  # Approx. 6 months before for training
-            prev_data_end = (today - timedelta(days=1)).strftime('%Y-%m-%d')
-            prev_data = fetch_stock_data(ticker, prev_data_start, prev_data_end)
-            prev_model, prev_scaler = train_and_save_model(ticker, prev_data_start, prev_data_end, look_back=60)
-            prev_month_predictions, prediction_dates = predict_previous_month_prices(prev_model, prev_scaler, prev_data['Close'].values, look_back=60)
+            prev_data_start = today - timedelta(days=180)  # 6 months prior for training data
+            prev_data_end = today - timedelta(days=1)  # Until yesterday
+            prev_data = fetch_stock_data(ticker, prev_data_start.strftime('%Y-%m-%d'), prev_data_end.strftime('%Y-%m-%d'))
+            prev_month_predictions, prediction_dates = predict_previous_month_prices(model, scaler, prev_data['Close'].values[-60:], look_back=60)
             
-            actual_prices = prev_data[prev_data['Date'].isin(prediction_dates)]['Close'].values
-            dates = prediction_dates
+            # Fetch actual prices for the last month
+            last_month_data = fetch_stock_data(ticker, prediction_dates[0].strftime('%Y-%m-%d'), prediction_dates[-1].strftime('%Y-%m-%d'))
+            actual_prices = last_month_data['Close'].values
+            dates = last_month_data['Date']
             
+            # Ensure lengths match for plotting
+            min_len = min(len(actual_prices), len(prev_month_predictions))
+            actual_prices = actual_prices[:min_len]
+            prev_month_predictions = prev_month_predictions[:min_len]
+            dates = dates[:min_len]
+
             # Plot actual vs predicted prices
             plt.figure(figsize=(10, 5))
             plt.plot(dates, actual_prices, label='Actual Prices')
-            plt.plot(dates[:len(prev_month_predictions)], prev_month_predictions, label='Predicted Prices', linestyle='--')
+            plt.plot(dates, prev_month_predictions, label='Predicted Prices', linestyle='--')
             plt.title('Actual vs Predicted Prices for Last Month')
             plt.xlabel('Date')
             plt.ylabel('Price')
@@ -55,9 +69,9 @@ if st.button('Predict'):
             st.pyplot(plt)
             
             # Display evaluation metrics
-            mse = mean_squared_error(actual_prices[:len(prev_month_predictions)], prev_month_predictions)
-            mae = mean_absolute_error(actual_prices[:len(prev_month_predictions)], prev_month_predictions)
-            r2 = r2_score(actual_prices[:len(prev_month_predictions)], prev_month_predictions)
+            mse = mean_squared_error(actual_prices, prev_month_predictions)
+            mae = mean_absolute_error(actual_prices, prev_month_predictions)
+            r2 = r2_score(actual_prices, prev_month_predictions)
             st.write(f"Mean Squared Error (MSE): {mse}")
             st.write(f"Mean Absolute Error (MAE): {mae}")
             st.write(f"R^2 Score: {r2}")
